@@ -1,9 +1,84 @@
 # Entity Rush
 
-## Setup
+**每隔一段时间，把世界里的实体全部传送到你身边。** 一个带筛选和配置界面的恶搞 / 生存挑战模组。
 
-For setup instructions, please see the [Fabric Documentation page](https://docs.fabricmc.net/develop/getting-started/creating-a-project#setting-up) related to the IDE that you are using.
+## 玩法
 
-## License
+进入单人世界后自动开始倒计时。倒计时归零时，把符合筛选条件的实体（怪物、动物、掉落物、矿车等）传送到你的位置，然后倒计时重新开始，循环往复。
 
-This template is available under the CC0 license. Feel free to learn from it and incorporate it in your own projects.
+## 功能特性
+
+- ⏱️ 进入世界自动开始倒计时，间隔可配置（10～3600 秒，默认 60）
+- 🎯 传送哪些实体完全由你决定，支持两种筛选模式（见下方「配置」）
+- 🚫 永远不传送玩家本身
+- 💾 计时进度随世界存档保存，退出再进入会接着走
+- ⏸️ 玩家处于旁观者模式时倒计时暂停，切回后继续
+- 💬 聊天栏在剩余 **50 / 40 / 30 / 20** 秒时提示，最后 **10** 秒每秒倒计时
+- 👋 进入世界时显示距离下次传送的剩余时间
+- 📢 传送执行时提示实际传送的实体数量
+- 🔒 模组在局域网模式下无法正常工作，因此禁用对局域网开放
+- ⚙️ 内置 Mod Menu + Cloth Config 配置界面，无需改文件
+
+## 配置
+
+在游戏里打开 **Mod Menu → Entity Rush → 配置**（需安装 [Mod Menu](https://modrinth.com/mod/modmenu)）即可调整，所有选项都带说明。主要分为两组：
+
+### 通用
+
+| 选项 | 说明 | 默认 |
+| --- | --- | --- |
+| 倒计时间隔（秒） | 每隔多少秒执行一次传送 | 60 |
+| 倒计时提示 | 聊天栏是否显示「还剩 X 秒」 | 开 |
+| 传送提示 | 传送执行时是否在聊天栏提示 | 开 |
+| 进入时显示剩余时间 | 进入世界时是否显示剩余时间 | 开 |
+
+### 传送实体
+
+两种模式二选一：
+
+**模板多选模式（默认）**——勾选要传送的实体大类：
+
+- 友好生物（猪、牛、羊等）
+- 中立生物（末影人、蜘蛛、狼等）
+- 敌对生物（僵尸、骷髅、苦力怕等）
+- 非生物实体（矿车、掉落物、投射物等）
+
+**名单模式**——手动指定实体 id，每行一个（如 `skeleton`、`pig`）。输入时按实体 id 自动补全，并校验是否为有效实体。
+
+- **白名单**：只传送名单内的实体
+- **黑名单**：传送所有实体，但排除名单内的
+
+> 名单里的实体 id 取自 Minecraft 原版的 164 种实体，输入时会自动提示并拒绝无效 id。
+
+## 需求
+
+- Minecraft **26.2**
+- Fabric Loader **>= 0.19.3**
+- [Fabric API](https://modrinth.com/mod/fabric-api)
+- [Cloth Config](https://modrinth.com/mod/cloth-config)（必需）
+- [Mod Menu](https://modrinth.com/mod/modmenu)（可选，提供配置界面入口）
+- Java **25+**
+
+## 安装
+
+1. 为 Minecraft 26.2 安装 Fabric Loader
+2. 把 Fabric API、Cloth Config 的 jar 放进 `mods` 文件夹
+3. （可选）把 Mod Menu 的 jar 放进 `mods` 文件夹
+4. 把 `entity-rush-1.0.0.jar` 放进同一个 `mods` 文件夹
+5. 启动游戏，创建或进入单人世界
+
+## 构建
+
+```bash
+# Linux / macOS / Git Bash
+./gradlew build
+
+# Windows 命令行
+gradlew.bat build
+```
+
+构建产物在 `build/libs/`。
+
+## 许可证
+
+本项目使用 [CC0-1.0](LICENSE) 许可证。
