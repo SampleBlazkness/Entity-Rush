@@ -18,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 @Mixin(IntegratedServer.class)
 public abstract class IntegratedServerMixin {
 	@Inject(
-		method = "publishServer(Lnet/minecraft/server/MinecraftServer$MultiplayerScope;Lnet/minecraft/world/level/GameType;ZI)Z",
+		method = "publishServer(Lnet/minecraft/server/MinecraftServer$MultiplayerScope;ZI)Z",
 		at = @At("HEAD"),
 		cancellable = true
 	)

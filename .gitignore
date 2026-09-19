@@ -32,6 +32,9 @@ bin/
 
 run/
 
+# 仅供本地试听的音符盒音效素材（原版资产，不可随仓库分发）
+sounds/
+
 # java
 
 hs_err_*.log

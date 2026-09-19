@@ -18,6 +18,8 @@ import java.util.List;
 public class EntityRushConfig {
 	private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
+	/** 模组总开关；关闭时倒计时冻结、不传送、不播音效或提示 */
+	public boolean moduleEnabled = true;
 	/** 传送间隔，单位秒 */
 	public int intervalSeconds = 60;
 	/** 是否在聊天栏显示「还剩X秒」的倒计时提示 */
@@ -26,6 +28,14 @@ public class EntityRushConfig {
 	public boolean showTeleportMessage = true;
 	/** 进入世界时是否显示剩余时间 */
 	public boolean showRemainingOnJoin = true;
+	/** 倒计时广播时是否播放提示音 */
+	public boolean countdownSound = true;
+	/** 提示音音色：大于 10 秒时（见 CountdownSounds） */
+	public String countdownSoundType = CountdownSounds.DEFAULT;
+	/** 提示音音色：10 秒以内（含 10 秒） */
+	public String countdownFinalSoundType = CountdownSounds.DEFAULT_FINAL;
+	/** 提示音音色：传送提示 */
+	public String teleportSoundType = CountdownSounds.DEFAULT_TELEPORT;
 
 	/** 传送模式："template"（模板多选）或 "list"（名单） */
 	public String teleportMode = "template";
