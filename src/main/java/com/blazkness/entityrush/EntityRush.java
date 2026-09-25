@@ -75,15 +75,17 @@ public class EntityRush implements ModInitializer {
 			return;
 		}
 
-		if (syncInterval()) {
-			return;
-		}
-
-		// 进入世界的剩余时间提示：每次进入只发一次（模组关闭时不消耗，打开后才补发）
+		// 进入世界的剩余时间提示：每次进入只发一次（模组关闭时不消耗，打开后才补发）。
+		// 放在计时同步检查之前——那一步在传送间隔变化时会直接 return，会把提示一起跳过，
+		// 导致提示晚一帧才出现（50ms）。
 		if (joinNoticePending && EntityRushSettings.showRemainingOnJoin()) {
 			int seconds = (state.getTicksRemaining() + 19) / 20;
-			broadcast(server, "距离下次传送还剩 " + seconds + " 秒！");
+			broadcast(server, "message.entity-rush.join_remaining", seconds);
 			joinNoticePending = false;
+		}
+
+		if (syncInterval()) {
+			return;
 		}
 
 		// 玩家处于旁观者模式或已死亡时冻结倒计时
@@ -99,7 +101,7 @@ public class EntityRush implements ModInitializer {
 			int teleported = teleportAllToPlayer(server);
 			state.setTicksRemaining(intervalTicks());
 			if (EntityRushSettings.showTeleportMessage()) {
-				broadcast(server, "已将 " + teleported + " 个实体传送到你身边！");
+				broadcast(server, "message.entity-rush.teleported", teleported);
 				playToAll(server, CountdownSounds.get(EntityRushSettings.teleportSoundType()));
 			}
 			return;
@@ -111,7 +113,7 @@ public class EntityRush implements ModInitializer {
 		if (EntityRushSettings.showCountdown() && ticks % 20 == 0) {
 			int seconds = ticks / 20;
 			if (seconds <= 10 || seconds % 10 == 0) {
-				broadcast(server, "还剩 " + seconds + " 秒！");
+				broadcast(server, "message.entity-rush.countdown", seconds);
 			}
 		}
 
@@ -215,10 +217,10 @@ public class EntityRush implements ModInitializer {
 		return true;
 	}
 
-	/** 在聊天栏广播消息 */
-	private static void broadcast(MinecraftServer server, String message) {
+	/** 在聊天栏广播消息（文案取自语言文件） */
+	private static void broadcast(MinecraftServer server, String key, Object... args) {
 		server.getPlayerList().broadcastSystemMessage(
-			Component.literal(message).withStyle(ChatFormatting.GOLD),
+			Component.translatable(key, args).withStyle(ChatFormatting.GOLD),
 			false
 		);
 	}

@@ -19,7 +19,7 @@ public class EntityListCell extends StringListListEntry.StringListCell {
 		super(value, list);
 		EditBox box = this.widget;
 		if (box != null) {
-			box.setHint(Component.literal("实体 id"));
+			box.setHint(Component.translatable("text.entity-rush.cell_hint"));
 			box.setResponder(text -> box.setSuggestion(findSuggestion(text)));
 		}
 	}

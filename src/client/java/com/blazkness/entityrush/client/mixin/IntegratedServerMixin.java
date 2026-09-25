@@ -42,7 +42,7 @@ public abstract class IntegratedServerMixin {
 		MinecraftServer server = (MinecraftServer) (Object) this;
 		for (ServerPlayer player : server.getPlayerList().getPlayers()) {
 			player.sendSystemMessage(
-				Component.literal("Entity Rush 模组在局域网模式下无法正常工作").withStyle(ChatFormatting.RED)
+				Component.translatable("message.entity-rush.lan_blocked").withStyle(ChatFormatting.RED)
 			);
 		}
 	}

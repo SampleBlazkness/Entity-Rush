@@ -30,6 +30,7 @@ dependencies {
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
 	// Mod Menu（运行时可选，仅提供配置入口）
+	// 想验证「未安装 Mod Menu」的提示时，把下面这行临时改成 compileOnly（编译期可见、运行时不加载），验证完改回。
 	implementation "com.terraformersmc:modmenu:${project.modmenu_version}"
 
 	// Cloth Config（配置界面库）
@@ -40,8 +41,11 @@ processResources {
 	def version = project.version
 	inputs.property "version", version
 
+	// 故意不用 Groovy 的 expand：SimpleTemplateEngine 会把文本里的 \n 当成转义序列
+	// 展开成真实换行，让 fabric.mod.json 的 description 变成非法 JSON（JSON 不允许字面换行）。
+	// 这里只做字面替换，保留 \n 转义。
 	filesMatching("fabric.mod.json") {
-		expand "version": version
+		filter { line -> line.replace('${version}', version) }
 	}
 }
 

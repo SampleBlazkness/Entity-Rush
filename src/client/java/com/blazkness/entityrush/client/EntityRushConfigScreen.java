@@ -8,7 +8,6 @@ import com.blazkness.entityrush.EntityRushWorldConfig;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
-import me.shedaniel.clothconfig2.impl.builders.SelectorBuilder;
 import me.shedaniel.clothconfig2.impl.builders.SubCategoryBuilder;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -21,18 +20,46 @@ import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * 用 Cloth Config 生成的配置界面，由 Mod Menu 的配置按钮打开。
- * 一级分类：「通用」「传送实体」「音效」（全局设置）、「当前世界」（特定世界设置，覆盖全局）。
- * 「当前世界」下再用子分类分成「通用」「传送实体」「音效」三组。
+ * 用 Cloth Config 生成的配置界面，由 Mod Menu 的配置按钮或快捷键打开。
+ *
+ * <p>一级分类只有两个：「全局设置」与「当前世界」（特定世界设置，启用时覆盖全局）。
+ * 两者结构完全对称，各自都由「通用」「传送实体」「音效」三个子分类组成，
+ * 且由同一套 helper 生成，因此外观与交互保证一致。
+ *
+ * <p>界面文案一律走翻译键（见 assets/entity-rush/lang/），不在代码里写死文本。
  */
 public class EntityRushConfigScreen {
+
+	// ==================================================================
+	// 翻译键
+	// ==================================================================
+	private static final String KEY_TITLE = "text.entity-rush.config.title";
+	private static final String KEY_CAT_GLOBAL = "category.entity-rush.global";
+	private static final String KEY_CAT_WORLD = "category.entity-rush.world";
+	private static final String KEY_CAT_GENERAL = "category.entity-rush.general";
+	private static final String KEY_CAT_TELEPORT = "category.entity-rush.teleport";
+	private static final String KEY_CAT_SOUND = "category.entity-rush.sound";
+	private static final String KEY_OVERRIDE_PREFIX = "text.entity-rush.override_prefix";
+	private static final String KEY_OVERRIDE_WARNING = "text.entity-rush.world_override_warning";
+	private static final String KEY_OVERRIDE_HINT = "text.entity-rush.world_override_hint";
+	private static final String KEY_NO_WORLD = "text.entity-rush.no_world";
+	private static final String KEY_MULTIPLAYER = "text.entity-rush.multiplayer";
+	private static final String KEY_ENABLE_OVERRIDE = "option.entity-rush.enable_world_override";
+
+	/** 「覆盖全局：」前缀拼在提示前；前缀本身也来自语言文件 */
+	private static Component tooltip(boolean override, String key) {
+		return override
+			? Component.translatable(KEY_OVERRIDE_PREFIX).append(Component.translatable(key))
+			: Component.translatable(key);
+	}
+
 	/** 名单单元格校验（全局与世界共用） */
 	private static Optional<Component> cellError(String value) {
 		if (value.isEmpty()) {
-			return Optional.of(Component.literal("名单不能为空"));
+			return Optional.of(Component.translatable("text.entity-rush.error.empty_cell"));
 		}
 		if (!EntityClassification.getAllEntityIds().contains(value)) {
-			return Optional.of(Component.literal("未知实体：" + value));
+			return Optional.of(Component.translatable("text.entity-rush.error.unknown_entity", value));
 		}
 		return Optional.empty();
 	}
@@ -40,29 +67,133 @@ public class EntityRushConfigScreen {
 	/** 整份名单校验（全局与世界共用） */
 	private static Optional<Component> listError(List<String> list) {
 		return list.stream().anyMatch(String::isEmpty)
-			? Optional.of(Component.literal("存在空的名单，请填写或删除"))
+			? Optional.of(Component.translatable("text.entity-rush.error.empty_list"))
 			: Optional.empty();
 	}
 
-	/** 本世界启用了独立设置时，在该栏目顶部提醒，避免误以为在这里改了就生效 */
+	/** 本世界启用了独立设置时，在「全局设置」栏目顶部提醒，避免误以为在这里改了就生效 */
 	private static void addOverrideNotice(ConfigEntryBuilder entry, ConfigCategory category, EntityRushWorldConfig world) {
 		if (world == null || !world.enabled) {
 			return;
 		}
 		category.addEntry(entry.startTextDescription(
-			Component.literal("⚠ 本世界已启用独立的特定世界设置").withStyle(ChatFormatting.GOLD)).build());
+			Component.translatable(KEY_OVERRIDE_WARNING).withStyle(ChatFormatting.GOLD)).build());
 		category.addEntry(entry.startTextDescription(
-			Component.literal("此处修改不影响本世界，详见「当前世界」栏目").withStyle(ChatFormatting.GRAY)).build());
+			Component.translatable(KEY_OVERRIDE_HINT).withStyle(ChatFormatting.GRAY)).build());
 	}
 
-	/** 一个音色选择器（全局与世界共用），prefix 为空时是全局项 */
-	private static SelectorBuilder<String> soundSelector(ConfigEntryBuilder entry, String label, String prefix,
-														 String current, String defaultValue, String tooltip,
-														 Consumer<String> saveConsumer) {
-		return entry.startSelector(Component.literal(label), CountdownSounds.ids().toArray(new String[0]), current)
+	// ==================================================================
+	// 条目构造 helper：全局与世界共用，保证两边外观与交互完全一致
+	// ==================================================================
+
+	/** 布尔开关 */
+	private static void addBool(SubCategoryBuilder cat, ConfigEntryBuilder entry, String labelKey,
+			String tooltipKey, boolean override, boolean value, boolean defaultValue, Consumer<Boolean> save) {
+		cat.add(entry.startBooleanToggle(Component.translatable(labelKey), value)
 			.setDefaultValue(defaultValue)
-			.setTooltip(Component.literal(prefix + tooltip))
-			.setSaveConsumer(saveConsumer);
+			.setTooltip(tooltip(override, tooltipKey))
+			.setSaveConsumer(save)
+			.build());
+	}
+
+	/** 整数输入 */
+	private static void addInt(SubCategoryBuilder cat, ConfigEntryBuilder entry, String labelKey,
+			String tooltipKey, boolean override, int value, int defaultValue, int min, int max, Consumer<Integer> save) {
+		cat.add(entry.startIntField(Component.translatable(labelKey), value)
+			.setDefaultValue(defaultValue)
+			.setMin(min)
+			.setMax(max)
+			.setTooltip(tooltip(override, tooltipKey))
+			.setSaveConsumer(save)
+			.build());
+	}
+
+	/** 实体名单（带单元格补全与校验） */
+	private static void addEntityList(SubCategoryBuilder cat, ConfigEntryBuilder entry, String labelKey,
+			String tooltipKey, boolean override, List<String> value, Consumer<List<String>> save) {
+		cat.add(entry.startStrList(Component.translatable(labelKey), value)
+			.setTooltip(tooltip(override, tooltipKey))
+			.setCreateNewInstance(list -> new EntityListCell("", list))
+			.setDefaultValue(ArrayList::new)
+			.setCellErrorSupplier(EntityRushConfigScreen::cellError)
+			.setErrorSupplier(EntityRushConfigScreen::listError)
+			.setSaveConsumer(save)
+			.build());
+	}
+
+	/** 音色选择器（左侧试听按钮 + 音色切换 + 重置） */
+	private static void addSoundSelector(SubCategoryBuilder cat, ConfigEntryBuilder entry, String labelKey,
+			String tooltipKey, boolean override, String current, String defaultValue, Consumer<String> save) {
+		cat.add(new SoundSelectorEntry(Component.translatable(labelKey), current, defaultValue, save,
+			tooltip(override, tooltipKey)));
+	}
+
+	/**
+	 * 三个子分类的内容。所有读写都通过传入的回调完成，因此全局与世界走的是同一份构建代码，
+	 * {@code override} 只决定提示是否加「覆盖全局：」前缀。
+	 */
+	private static void buildGeneral(SubCategoryBuilder cat, ConfigEntryBuilder entry, boolean override,
+			boolean moduleEnabled, Consumer<Boolean> setModuleEnabled,
+			int intervalSeconds, Consumer<Integer> setIntervalSeconds,
+			boolean showCountdown, Consumer<Boolean> setShowCountdown,
+			boolean showTeleportMessage, Consumer<Boolean> setShowTeleportMessage,
+			boolean showRemainingOnJoin, Consumer<Boolean> setShowRemainingOnJoin) {
+		addBool(cat, entry, "option.entity-rush.module_enabled", "option.entity-rush.module_enabled.tooltip",
+			override, moduleEnabled, true, setModuleEnabled);
+		addInt(cat, entry, "option.entity-rush.interval", "option.entity-rush.interval.tooltip",
+			override, intervalSeconds, 60, 10, 3600, setIntervalSeconds);
+		addBool(cat, entry, "option.entity-rush.show_countdown", "option.entity-rush.show_countdown.tooltip",
+			override, showCountdown, true, setShowCountdown);
+		addBool(cat, entry, "option.entity-rush.show_teleport_message", "option.entity-rush.show_teleport_message.tooltip",
+			override, showTeleportMessage, true, setShowTeleportMessage);
+		addBool(cat, entry, "option.entity-rush.show_remaining_on_join", "option.entity-rush.show_remaining_on_join.tooltip",
+			override, showRemainingOnJoin, true, setShowRemainingOnJoin);
+	}
+
+	private static void buildTeleport(SubCategoryBuilder cat, ConfigEntryBuilder entry, boolean override,
+			String teleportMode, Consumer<String> setTeleportMode,
+			boolean tpFriendly, Consumer<Boolean> setTpFriendly,
+			boolean tpNeutral, Consumer<Boolean> setTpNeutral,
+			boolean tpHostile, Consumer<Boolean> setTpHostile,
+			boolean tpNonEntity, Consumer<Boolean> setTpNonEntity,
+			boolean tpUseWhitelist, Consumer<Boolean> setTpUseWhitelist,
+			List<String> tpEntityList, Consumer<List<String>> setTpEntityList) {
+		addBool(cat, entry, "option.entity-rush.list_mode", "option.entity-rush.list_mode.tooltip",
+			override, "list".equals(teleportMode), false,
+			value -> setTeleportMode.accept(value ? "list" : "template"));
+		addBool(cat, entry, "option.entity-rush.tp_friendly", "option.entity-rush.tp_friendly.tooltip",
+			override, tpFriendly, true, setTpFriendly);
+		addBool(cat, entry, "option.entity-rush.tp_neutral", "option.entity-rush.tp_neutral.tooltip",
+			override, tpNeutral, true, setTpNeutral);
+		addBool(cat, entry, "option.entity-rush.tp_hostile", "option.entity-rush.tp_hostile.tooltip",
+			override, tpHostile, true, setTpHostile);
+		addBool(cat, entry, "option.entity-rush.tp_non_entity", "option.entity-rush.tp_non_entity.tooltip",
+			override, tpNonEntity, true, setTpNonEntity);
+		addBool(cat, entry, "option.entity-rush.tp_use_whitelist", "option.entity-rush.tp_use_whitelist.tooltip",
+			override, tpUseWhitelist, false, setTpUseWhitelist);
+		addEntityList(cat, entry, "option.entity-rush.tp_entity_list", "option.entity-rush.tp_entity_list.tooltip",
+			override, tpEntityList, setTpEntityList);
+	}
+
+	private static void buildSound(SubCategoryBuilder cat, ConfigEntryBuilder entry, boolean override,
+			boolean countdownSound, Consumer<Boolean> setCountdownSound,
+			String countdownSoundType, Consumer<String> setCountdownSoundType,
+			String countdownFinalSoundType, Consumer<String> setCountdownFinalSoundType,
+			String teleportSoundType, Consumer<String> setTeleportSoundType) {
+		addBool(cat, entry, "option.entity-rush.countdown_sound", "option.entity-rush.countdown_sound.tooltip",
+			override, countdownSound, true, setCountdownSound);
+		addSoundSelector(cat, entry, "option.entity-rush.sound_over_10", "option.entity-rush.sound_over_10.tooltip",
+			override, countdownSoundType, CountdownSounds.DEFAULT, setCountdownSoundType);
+		addSoundSelector(cat, entry, "option.entity-rush.sound_within_10", "option.entity-rush.sound_within_10.tooltip",
+			override, countdownFinalSoundType, CountdownSounds.DEFAULT_FINAL, setCountdownFinalSoundType);
+		addSoundSelector(cat, entry, "option.entity-rush.sound_teleport", "option.entity-rush.sound_teleport.tooltip",
+			override, teleportSoundType, CountdownSounds.DEFAULT_TELEPORT, setTeleportSoundType);
+	}
+
+	private static SubCategoryBuilder sub(ConfigEntryBuilder entry, String nameKey) {
+		SubCategoryBuilder builder = entry.startSubCategory(Component.translatable(nameKey));
+		builder.setExpanded(true);
+		return builder;
 	}
 
 	public static Screen create(Screen parent) {
@@ -71,7 +202,7 @@ public class EntityRushConfigScreen {
 
 		ConfigBuilder builder = ConfigBuilder.create()
 			.setParentScreen(parent)
-			.setTitle(Component.literal("Entity Rush 设置"))
+			.setTitle(Component.translatable(KEY_TITLE))
 			.setSavingRunnable(() -> {
 				EntityRushConfig.save();
 				// 单人世界下把世界设置写进 <世界文件夹>/data/entity-rush.json
@@ -85,245 +216,76 @@ public class EntityRushConfigScreen {
 
 		EntityRush.LOGGER.info("打开配置界面：world={} enabled={}", world != null, world != null && world.enabled);
 
-		// ===== 全局：「通用」 =====
-		ConfigCategory general = builder.getOrCreateCategory(Component.literal("通用"));
-		addOverrideNotice(entry, general, world);
+		// ===== 栏目一：全局设置 =====
+		ConfigCategory globalCategory = builder.getOrCreateCategory(Component.translatable(KEY_CAT_GLOBAL));
+		addOverrideNotice(entry, globalCategory, world);
 
-		general.addEntry(entry.startBooleanToggle(Component.literal("模组开关"), config.moduleEnabled)
-			.setDefaultValue(true)
-			.setTooltip(Component.literal("关闭后倒计时冻结，不传送、不播音效或提示；在世界内改开后立即生效"))
-			.setSaveConsumer(value -> config.moduleEnabled = value)
-			.build());
+		SubCategoryBuilder globalGeneral = sub(entry, KEY_CAT_GENERAL);
+		buildGeneral(globalGeneral, entry, false,
+			config.moduleEnabled, value -> config.moduleEnabled = value,
+			config.intervalSeconds, value -> config.intervalSeconds = value,
+			config.showCountdown, value -> config.showCountdown = value,
+			config.showTeleportMessage, value -> config.showTeleportMessage = value,
+			config.showRemainingOnJoin, value -> config.showRemainingOnJoin = value);
+		globalCategory.addEntry(globalGeneral.build());
 
-		general.addEntry(entry.startIntField(Component.literal("倒计时间隔（秒）"), config.intervalSeconds)
-			.setDefaultValue(60)
-			.setMin(10)
-			.setMax(3600)
-			.setTooltip(Component.literal("每隔多少秒执行一次传送"))
-			.setSaveConsumer(value -> config.intervalSeconds = value)
-			.build());
+		SubCategoryBuilder globalTeleport = sub(entry, KEY_CAT_TELEPORT);
+		buildTeleport(globalTeleport, entry, false,
+			config.teleportMode, value -> config.teleportMode = value,
+			config.tpFriendly, value -> config.tpFriendly = value,
+			config.tpNeutral, value -> config.tpNeutral = value,
+			config.tpHostile, value -> config.tpHostile = value,
+			config.tpNonEntity, value -> config.tpNonEntity = value,
+			config.tpUseWhitelist, value -> config.tpUseWhitelist = value,
+			config.tpEntityList, value -> config.tpEntityList = new ArrayList<>(value));
+		globalCategory.addEntry(globalTeleport.build());
 
-		general.addEntry(entry.startBooleanToggle(Component.literal("倒计时提示"), config.showCountdown)
-			.setDefaultValue(true)
-			.setTooltip(Component.literal("是否在聊天栏显示「还剩 X 秒」倒计时"))
-			.setSaveConsumer(value -> config.showCountdown = value)
-			.build());
+		SubCategoryBuilder globalSound = sub(entry, KEY_CAT_SOUND);
+		buildSound(globalSound, entry, false,
+			config.countdownSound, value -> config.countdownSound = value,
+			config.countdownSoundType, value -> config.countdownSoundType = value,
+			config.countdownFinalSoundType, value -> config.countdownFinalSoundType = value,
+			config.teleportSoundType, value -> config.teleportSoundType = value);
+		globalCategory.addEntry(globalSound.build());
 
-		general.addEntry(entry.startBooleanToggle(Component.literal("传送提示"), config.showTeleportMessage)
-			.setDefaultValue(true)
-			.setTooltip(Component.literal("传送执行时是否在聊天栏提示，并播放传送提示音"))
-			.setSaveConsumer(value -> config.showTeleportMessage = value)
-			.build());
-
-		general.addEntry(entry.startBooleanToggle(Component.literal("进入时显示剩余时间"), config.showRemainingOnJoin)
-			.setDefaultValue(true)
-			.setTooltip(Component.literal("进入世界时在聊天栏显示距离下次传送的剩余时间（不播放提示音）"))
-			.setSaveConsumer(value -> config.showRemainingOnJoin = value)
-			.build());
-
-		// ===== 全局：「传送实体」 =====
-		ConfigCategory teleport = builder.getOrCreateCategory(Component.literal("传送实体"));
-		addOverrideNotice(entry, teleport, world);
-
-		teleport.addEntry(entry.startBooleanToggle(Component.literal("名单模式"), "list".equals(config.teleportMode))
-			.setDefaultValue(false)
-			.setTooltip(Component.literal("关=模板多选（勾选友好/中立/敌对/非生物）；开=名单模式（白名单/黑名单）"))
-			.setSaveConsumer(value -> config.teleportMode = value ? "list" : "template")
-			.build());
-
-		teleport.addEntry(entry.startBooleanToggle(Component.literal("传送友好生物"), config.tpFriendly)
-			.setDefaultValue(true)
-			.setTooltip(Component.literal("模板模式：是否传送友好生物（猪、牛、羊等）"))
-			.setSaveConsumer(value -> config.tpFriendly = value)
-			.build());
-
-		teleport.addEntry(entry.startBooleanToggle(Component.literal("传送中立生物"), config.tpNeutral)
-			.setDefaultValue(true)
-			.setTooltip(Component.literal("模板模式：是否传送中立生物（末影人、蜘蛛、狼等）"))
-			.setSaveConsumer(value -> config.tpNeutral = value)
-			.build());
-
-		teleport.addEntry(entry.startBooleanToggle(Component.literal("传送敌对生物"), config.tpHostile)
-			.setDefaultValue(true)
-			.setTooltip(Component.literal("模板模式：是否传送敌对生物（僵尸、骷髅、苦力怕等）"))
-			.setSaveConsumer(value -> config.tpHostile = value)
-			.build());
-
-		teleport.addEntry(entry.startBooleanToggle(Component.literal("传送非生物实体"), config.tpNonEntity)
-			.setDefaultValue(true)
-			.setTooltip(Component.literal("模板模式：是否传送非生物实体（矿车、掉落物、投射物等）"))
-			.setSaveConsumer(value -> config.tpNonEntity = value)
-			.build());
-
-		teleport.addEntry(entry.startBooleanToggle(Component.literal("白名单模式"), config.tpUseWhitelist)
-			.setDefaultValue(false)
-			.setTooltip(Component.literal("名单模式：开=白名单（只传名单内实体），关=黑名单（排除名单内实体）"))
-			.setSaveConsumer(value -> config.tpUseWhitelist = value)
-			.build());
-
-		teleport.addEntry(entry.startStrList(Component.literal("实体名单"), config.tpEntityList)
-			.setTooltip(Component.literal("名单模式的实体 id，每行一个（如 skeleton、pig），输入时自动补全"))
-			.setCreateNewInstance(list -> new EntityListCell("", list))
-			.setDefaultValue(() -> new ArrayList<>())
-			.setCellErrorSupplier(EntityRushConfigScreen::cellError)
-			.setErrorSupplier(EntityRushConfigScreen::listError)
-			.setSaveConsumer(value -> config.tpEntityList = new ArrayList<>(value))
-			.build());
-
-		// ===== 全局：「音效」 =====
-		ConfigCategory sound = builder.getOrCreateCategory(Component.literal("音效"));
-		addOverrideNotice(entry, sound, world);
-
-		sound.addEntry(entry.startBooleanToggle(Component.literal("倒计时提示音"), config.countdownSound)
-			.setDefaultValue(true)
-			.setTooltip(Component.literal("每次广播「还剩 X 秒」时是否播放提示音（进入世界的那句提示不播）"))
-			.setSaveConsumer(value -> config.countdownSound = value)
-			.build());
-
-		sound.addEntry(soundSelector(entry, "大于 10 秒的音效", "", config.countdownSoundType,
-				CountdownSounds.DEFAULT, "每次广播「还剩 X 秒」时播放（X 大于 10）",
-				value -> config.countdownSoundType = value)
-			.build());
-
-		sound.addEntry(soundSelector(entry, "10 秒以内的音效", "", config.countdownFinalSoundType,
-				CountdownSounds.DEFAULT_FINAL, "最后 10 秒每秒播放（X 小于等于 10）",
-				value -> config.countdownFinalSoundType = value)
-			.build());
-
-		sound.addEntry(soundSelector(entry, "传送提示音效", "", config.teleportSoundType,
-				CountdownSounds.DEFAULT_TELEPORT, "实体传送完成并提示时播放（需开启「传送提示」）",
-				value -> config.teleportSoundType = value)
-			.build());
-
-		// ===== 当前世界（特定世界设置，覆盖全局） =====
-		ConfigCategory worldCategory = builder.getOrCreateCategory(Component.literal("当前世界"));
+		// ===== 栏目二：当前世界（特定世界设置，覆盖全局）=====
+		ConfigCategory worldCategory = builder.getOrCreateCategory(Component.translatable(KEY_CAT_WORLD));
 
 		if (world == null) {
-			String message = mc.level == null
-				? "尚未进入世界，无法使用特定世界设置。"
-				: "当前为多人游戏，特定世界设置仅在单人世界可用。";
-			worldCategory.addEntry(entry.startTextDescription(Component.literal(message)).build());
+			worldCategory.addEntry(entry.startTextDescription(
+				Component.translatable(mc.level == null ? KEY_NO_WORLD : KEY_MULTIPLAYER)).build());
 		} else {
-			// --- 子分类：「通用」 ---
-			SubCategoryBuilder worldGeneral = entry.startSubCategory(Component.literal("通用"));
-			worldGeneral.setExpanded(true);
-
-			worldGeneral.add(entry.startBooleanToggle(Component.literal("启用特定世界设置"), world.enabled)
+			SubCategoryBuilder worldGeneral = sub(entry, KEY_CAT_GENERAL);
+			worldGeneral.add(entry.startBooleanToggle(Component.translatable(KEY_ENABLE_OVERRIDE), world.enabled)
 				.setDefaultValue(false)
-				.setTooltip(Component.literal("开启后，本世界使用下面的设置覆盖全局设置；关闭则完全跟随全局"))
+				.setTooltip(Component.translatable(KEY_ENABLE_OVERRIDE + ".tooltip"))
 				.setSaveConsumer(value -> world.enabled = value)
 				.build());
-
-			worldGeneral.add(entry.startBooleanToggle(Component.literal("模组开关"), world.moduleEnabled)
-				.setDefaultValue(true)
-				.setTooltip(Component.literal("覆盖全局：关闭后本世界倒计时冻结，不传送、不播音效或提示"))
-				.setSaveConsumer(value -> world.moduleEnabled = value)
-				.build());
-
-			worldGeneral.add(entry.startIntField(Component.literal("倒计时间隔（秒）"), world.intervalSeconds)
-				.setDefaultValue(60)
-				.setMin(10)
-				.setMax(3600)
-				.setTooltip(Component.literal("覆盖全局：每隔多少秒执行一次传送"))
-				.setSaveConsumer(value -> world.intervalSeconds = value)
-				.build());
-
-			worldGeneral.add(entry.startBooleanToggle(Component.literal("倒计时提示"), world.showCountdown)
-				.setDefaultValue(true)
-				.setTooltip(Component.literal("覆盖全局：是否在聊天栏显示「还剩 X 秒」倒计时"))
-				.setSaveConsumer(value -> world.showCountdown = value)
-				.build());
-
-			worldGeneral.add(entry.startBooleanToggle(Component.literal("传送提示"), world.showTeleportMessage)
-				.setDefaultValue(true)
-				.setTooltip(Component.literal("覆盖全局：传送执行时是否在聊天栏提示，并播放传送提示音"))
-				.setSaveConsumer(value -> world.showTeleportMessage = value)
-				.build());
-
-			worldGeneral.add(entry.startBooleanToggle(Component.literal("进入时显示剩余时间"), world.showRemainingOnJoin)
-				.setDefaultValue(true)
-				.setTooltip(Component.literal("覆盖全局：进入世界时在聊天栏显示距离下次传送的剩余时间（不播放提示音）"))
-				.setSaveConsumer(value -> world.showRemainingOnJoin = value)
-				.build());
-
+			buildGeneral(worldGeneral, entry, true,
+				world.moduleEnabled, value -> world.moduleEnabled = value,
+				world.intervalSeconds, value -> world.intervalSeconds = value,
+				world.showCountdown, value -> world.showCountdown = value,
+				world.showTeleportMessage, value -> world.showTeleportMessage = value,
+				world.showRemainingOnJoin, value -> world.showRemainingOnJoin = value);
 			worldCategory.addEntry(worldGeneral.build());
 
-			// --- 子分类：「传送实体」 ---
-			SubCategoryBuilder worldTeleport = entry.startSubCategory(Component.literal("传送实体"));
-			worldTeleport.setExpanded(true);
-
-			worldTeleport.add(entry.startBooleanToggle(Component.literal("名单模式"), "list".equals(world.teleportMode))
-				.setDefaultValue(false)
-				.setTooltip(Component.literal("覆盖全局：关=模板多选；开=名单模式"))
-				.setSaveConsumer(value -> world.teleportMode = value ? "list" : "template")
-				.build());
-
-			worldTeleport.add(entry.startBooleanToggle(Component.literal("传送友好生物"), world.tpFriendly)
-				.setDefaultValue(true)
-				.setTooltip(Component.literal("覆盖全局：模板模式是否传送友好生物"))
-				.setSaveConsumer(value -> world.tpFriendly = value)
-				.build());
-
-			worldTeleport.add(entry.startBooleanToggle(Component.literal("传送中立生物"), world.tpNeutral)
-				.setDefaultValue(true)
-				.setTooltip(Component.literal("覆盖全局：模板模式是否传送中立生物"))
-				.setSaveConsumer(value -> world.tpNeutral = value)
-				.build());
-
-			worldTeleport.add(entry.startBooleanToggle(Component.literal("传送敌对生物"), world.tpHostile)
-				.setDefaultValue(true)
-				.setTooltip(Component.literal("覆盖全局：模板模式是否传送敌对生物"))
-				.setSaveConsumer(value -> world.tpHostile = value)
-				.build());
-
-			worldTeleport.add(entry.startBooleanToggle(Component.literal("传送非生物实体"), world.tpNonEntity)
-				.setDefaultValue(true)
-				.setTooltip(Component.literal("覆盖全局：模板模式是否传送非生物实体"))
-				.setSaveConsumer(value -> world.tpNonEntity = value)
-				.build());
-
-			worldTeleport.add(entry.startBooleanToggle(Component.literal("白名单模式"), world.tpUseWhitelist)
-				.setDefaultValue(false)
-				.setTooltip(Component.literal("覆盖全局：开=白名单（只传名单内），关=黑名单（排除名单内）"))
-				.setSaveConsumer(value -> world.tpUseWhitelist = value)
-				.build());
-
-			worldTeleport.add(entry.startStrList(Component.literal("实体名单"), world.tpEntityList)
-				.setTooltip(Component.literal("覆盖全局：名单模式的实体 id，每行一个，输入时自动补全"))
-				.setCreateNewInstance(list -> new EntityListCell("", list))
-				.setDefaultValue(() -> new ArrayList<>())
-				.setCellErrorSupplier(EntityRushConfigScreen::cellError)
-				.setErrorSupplier(EntityRushConfigScreen::listError)
-				.setSaveConsumer(value -> world.tpEntityList = new ArrayList<>(value))
-				.build());
-
+			SubCategoryBuilder worldTeleport = sub(entry, KEY_CAT_TELEPORT);
+			buildTeleport(worldTeleport, entry, true,
+				world.teleportMode, value -> world.teleportMode = value,
+				world.tpFriendly, value -> world.tpFriendly = value,
+				world.tpNeutral, value -> world.tpNeutral = value,
+				world.tpHostile, value -> world.tpHostile = value,
+				world.tpNonEntity, value -> world.tpNonEntity = value,
+				world.tpUseWhitelist, value -> world.tpUseWhitelist = value,
+				world.tpEntityList, value -> world.tpEntityList = new ArrayList<>(value));
 			worldCategory.addEntry(worldTeleport.build());
 
-			// --- 子分类：「音效」 ---
-			SubCategoryBuilder worldSound = entry.startSubCategory(Component.literal("音效"));
-			worldSound.setExpanded(true);
-
-			worldSound.add(entry.startBooleanToggle(Component.literal("倒计时提示音"), world.countdownSound)
-				.setDefaultValue(true)
-				.setTooltip(Component.literal("覆盖全局：每次广播「还剩 X 秒」时是否播放提示音"))
-				.setSaveConsumer(value -> world.countdownSound = value)
-				.build());
-
-			worldSound.add(soundSelector(entry, "大于 10 秒的音效", "覆盖全局：", world.countdownSoundType,
-					CountdownSounds.DEFAULT, "每次广播「还剩 X 秒」时播放（X 大于 10）",
-					value -> world.countdownSoundType = value)
-				.build());
-
-			worldSound.add(soundSelector(entry, "10 秒以内的音效", "覆盖全局：", world.countdownFinalSoundType,
-					CountdownSounds.DEFAULT_FINAL, "最后 10 秒每秒播放（X 小于等于 10）",
-					value -> world.countdownFinalSoundType = value)
-				.build());
-
-			worldSound.add(soundSelector(entry, "传送提示音效", "覆盖全局：", world.teleportSoundType,
-					CountdownSounds.DEFAULT_TELEPORT, "实体传送完成并提示时播放（需开启「传送提示」）",
-					value -> world.teleportSoundType = value)
-				.build());
-
+			SubCategoryBuilder worldSound = sub(entry, KEY_CAT_SOUND);
+			buildSound(worldSound, entry, true,
+				world.countdownSound, value -> world.countdownSound = value,
+				world.countdownSoundType, value -> world.countdownSoundType = value,
+				world.countdownFinalSoundType, value -> world.countdownFinalSoundType = value,
+				world.teleportSoundType, value -> world.teleportSoundType = value);
 			worldCategory.addEntry(worldSound.build());
 		}
 

@@ -3,7 +3,7 @@
 	"id": "entity-rush",
 	"version": "${version}",
 	"name": "Entity Rush",
-	"description": "On a configurable timer, the entities you choose are teleported to your position. Interval, entity filter, sounds and a master switch are all adjustable in-game.",
+	"description": "倒计时归零时，把符合筛选条件的实体传送到你的位置。间隔、实体筛选、音效与模组开关都可以在游戏内调整。\n\nOn a timer, teleports the entities you choose to your position. Interval, entity filter, sounds and a master switch are all adjustable in-game.",
 	"authors": [
 		"SampleBlazkness"
 	],
